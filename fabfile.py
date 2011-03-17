@@ -21,15 +21,21 @@ AWS_SECRET_ACCESS_KEY=os.environ['AWS_SECRET_ACCESS_KEY']
 KEY_BASE=os.environ['EC2_KEY_BASE']
 KEY_PATH='~/.ssh/' # trailing slash please
 RELEASE_BUCKET = 'geonode-release'
+DEB_BUCKET = 'geonode-deb'
+RPM_BUCKET = 'geonode-rpm'
 AMI_BUCKET = 'geonode-ami-dev'
+#ARCH='x86_64'
 ARCH='i386'
 MAKE_PUBLIC=True
-RELEASE_PKG_URL='https://s3.amazonaws.com/geonode-release/GeoNode-1.0.1-2011-03-04.tar.gz'
-RELEASE_NAME='GeoNode-1.0.1-2011-03-04.tar.gz'
-VERSION='1.0.1'
-#RELEASE_PKG_URL='http://dev.geonode.org/release/GeoNode-1.0.tar.gz'
+GEONODE_GIT_URL='git://github.com/GeoNode/geonode.git'
 #RELEASE_NAME='GeoNode-1.0.tar.gz'
+#RELEASE_PKG_URL='http://dev.geonode.org/release/GeoNode-1.0.tar.gz'
+#RELEASE_DEB_URL='http://apt.opengeo.org/lucid/pool/main/g/geonode/geonode_1.0.final+1_i386.deb'
 #VERSION='1.0'
+RELEASE_NAME='GeoNode-1.0.1-2011-03-10.tar.gz'
+RELEASE_PKG_URL='https://s3.amazonaws.com/geonode-release/GeoNode-1.0.1-2011-03-10.tar.gz'
+RELEASE_DEB_URL='https://s3.amazonaws.com/geonode-deb/geonode_1.0.1_i386.deb'
+VERSION='1.0.1'
 POSTGRES_USER='geonode'
 POSTGRES_PASSWORD='g30n0d3'
 ADMIN_USER='admin' # Should not be modified
@@ -85,13 +91,13 @@ def setup_pgsql(setup_geonode_db=True):
         sudo("psql -c \"alter user geonode with encrypted password '%s'\" " % (POSTGRES_PASSWORD), user="postgres")
 
 def setup_prod():
-    setup_pgsql(True)
+    setup_pgsql(setup_geonode_db=True)
     sudo("apt-get install -y tomcat6 libjpeg-dev libpng-dev python-gdal apache2 libapache2-mod-wsgi")
     # -Xms1024m -Xmx1024m -XX:NewSize=256m -XX:MaxNewSize=256m -XX:PermSize=256m -XX:MaxPermSize=256m
 
 def build():
-    run('git clone git://github.com/GeoNode/geonode.git')
-    #run('git clone git://github.com/jj0hns0n/geonode.git')
+    sudo('chmod -R 777 /tmp #WTF?')
+    run('git clone %s' % GEONODE_GIT_URL)
     run('cd geonode;git submodule update --init')
     # WORKAROUND: Avoid compiling reportlab because it is already installed via apt-get and it hangs with fabric (too much data)
     run("sed '/reportlab/d' geonode/shared/core-libs.txt > core-libs.txt;mv core-libs.txt geonode/shared/core-libs.txt")
@@ -107,10 +113,17 @@ def switch_branch(branch_name):
     run('cd geonode;source bin/activate;django-admin.py syncdb --settings=geonode.settings')
     run('cd geonode;source bin/activate; paver make_release')
 
-def upload_release():
+def upload_release(type='gz'):
     put('./upload.py', '~/')
-    release_file = str(run('ls ~/geonode/shared/GeoNode*.tar.gz'))
-    run('cd geonode/shared;export AWS_ACCESS_KEY_ID=%s;export AWS_SECRET_ACCESS_KEY=%s;python ~/upload.py %s %s' % (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY,RELEASE_BUCKET,release_file)) 
+    if(type=='gz'):
+        release_file = str(run('ls ~/geonode/shared/GeoNode*.tar.gz'))
+        path = 'geonode/shared'
+        bucket = RELEASE_BUCKET
+    elif(type=='deb'):
+        release_file = str(run('ls ~/geonode*.deb'))
+        path = '~'
+        bucket = DEB_BUCKET 
+    run('cd %s;export AWS_ACCESS_KEY_ID=%s;export AWS_SECRET_ACCESS_KEY=%s;python ~/upload.py %s %s' % (path, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY,bucket,release_file)) 
     run('rm ~/upload.py')
     return release_file
 
@@ -131,25 +144,26 @@ def hosty():
     print "http://%s:8000" % env.host
     run('cd geonode;source bin/activate;paver host')
 
-def deploy_prod(host=None):
-    x86_64 = False
+def deploy_prod(host=None, pkg=False):
     uname = sudo('uname -a')
     if("x86_64" in uname):
-        x86_64 = True
+        arch = 'x86_64' 
+        pkg=False
     if(host is None):
         host = env.host
     sudo('export DEBIAN_FRONTEND=noninteractive')
-    if(x86_64 == False):
+    if(pkg == True):
         sudo('add-apt-repository "deb http://apt.opengeo.org/lucid lucid main"')
         sudo('apt-get -y update')
     sudo('echo "geonode geonode/django_user string %s" | sudo debconf-set-selections' % ADMIN_USER)
     sudo('echo "geonode geonode/django_password password %s" | sudo debconf-set-selections' % ADMIN_PASSWORD)
     sudo('echo "geonode geonode/hostname string %s" | sudo debconf-set-selections' % host)
-    if(x86_64 == False):
+    if(pkg == True):
         sudo("apt-get install -y --force-yes geonode")
     else:
-        sudo("wget http://apt.opengeo.org/lucid/pool/main/g/geonode/geonode_1.0.final+1_i386.deb")
-        sudo("dpkg --force-architecture -i geonode_1.0.final+1_i386.deb")
+        release_name = RELEASE_DEB_URL.split('/')[-1]
+        sudo("wget %s" % RELEASE_DEB_URL) 
+        sudo("dpkg --force-architecture -i %s" % release_name) 
 
 def setup_geonode_wsgi(host):
     run('mkdir -p ~/wsgi')
@@ -244,11 +258,12 @@ def geonode_release():
     setup_prod()
     install_release()
 
-def geonode_deb():
+def build_geonode_deb():
     setup_deb()
     run('wget %s -O ~/geonode-deb/%s' % (RELEASE_PKG_URL, RELEASE_NAME))
     run('cd geonode-deb; tar xvf %s' % RELEASE_NAME)
     run('cd geonode-deb; debuild -uc -us')
+    upload_release(type='deb')
 
 def install_ec2_tools():
     sudo('export DEBIAN_FRONTEND=noninteractive')
@@ -270,11 +285,11 @@ def copy_keys():
     put(('%s*%s*' % (KEY_PATH, KEY_BASE)), '~/.ssh/', mode=0400)
     pass
 
-def create_ami():
-    #setup()
-    #setup_prod()
+def build_geonode_ami():
+    setup()
+    setup_prod()
     #deploy_prod(host='replace.me.host')
-    #install_release(host='replace.me.host')
+    install_release(host='replace.me.host')
     #setup_batch_upload(internal_ip='replace.me.internal')
     cleanup_temp()
     copy_keys()
