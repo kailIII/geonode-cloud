@@ -151,7 +151,7 @@ function deploy_media () {
   rm "$MEDIA_DIR" -rf
 
   ## * unpack new media to appropriate location
-  unzip -qq "$WORKDIR/geonode-client.zip" -d "$MEDIA_DIR"
+  #unzip -qq "$WORKDIR/geonode-client.zip" -d "$MEDIA_DIR"
 
   chown $HTTPD_USER -R "$MEDIA_DIR"
 }
