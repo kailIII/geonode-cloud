@@ -14,6 +14,7 @@ import datetime
 
 from fabric.api import env, sudo, run, cd, local, put
 from fabric.contrib.project import rsync_project
+from urlparse import urlparse
 
 AWS_USER_ID=os.environ['AWS_USER_ID']
 AWS_ACCESS_KEY_ID=os.environ['AWS_ACCESS_KEY_ID']
@@ -24,8 +25,8 @@ RELEASE_BUCKET = 'geonode-release'
 DEB_BUCKET = 'geonode-deb'
 RPM_BUCKET = 'geonode-rpm'
 AMI_BUCKET = 'geonode-ami-dev'
-#ARCH='x86_64'
-ARCH='i386'
+ARCH='x86_64'
+#ARCH='i386'
 MAKE_PUBLIC=True
 GEONODE_GIT_URL='git://github.com/GeoNode/geonode.git'
 #RELEASE_NAME='GeoNode-1.0.tar.gz'
@@ -35,13 +36,16 @@ GEONODE_GIT_URL='git://github.com/GeoNode/geonode.git'
 RELEASE_NAME='GeoNode-1.0.1-2011-03-10.tar.gz'
 RELEASE_PKG_URL='https://s3.amazonaws.com/geonode-release/GeoNode-1.0.1-2011-03-10.tar.gz'
 RELEASE_DEB_URL='https://s3.amazonaws.com/geonode-deb/geonode_1.0.1_i386.deb'
+RELEASE_RPM_URL='https://s3.amazonaws.com/geonode-rpm/geonode-1.0.1-final.i386.rpm'
 VERSION='1.0.1'
+PSYCOPG2_RELEASE_URL="http://www.psycopg.org/psycopg/tarballs/PSYCOPG-2-4/psycopg2-2.4.tar.gz"
 POSTGRES_USER='geonode'
 POSTGRES_PASSWORD='g30n0d3'
 ADMIN_USER='admin' # Should not be modified
 ADMIN_PASSWORD='adm1n'
 ADMIN_EMAIL='admin@admin.admin'
 ENABLE_FTP=False
+DEFAULT_PLATFORM="centos"
 
 # Geonode build
 
@@ -66,21 +70,33 @@ def sunjava():
 def openjdk():
     sudo('apt-get install -y openjdk-6-jdk')   
 
-def setup():
-    sudo('apt-get -y update')
-    sudo('apt-get install -y python-software-properties')
-    # upgrade()
+def setup(platform="ubuntu"):
+    if(platform == "ubuntu"):
+        sudo('apt-get -y update')
+        sudo('apt-get install -y python-software-properties')
+        # upgrade()
 
-    # Choose one between sunjava and openjdk.
-    #openjdk()
-    sunjava()
+        # Choose one between sunjava and openjdk.
+        #openjdk()
+        sunjava()
 
-    sudo('apt-get install -y zip subversion git-core binutils build-essential python-dev python-setuptools python-imaging python-reportlab gdal-bin libproj-dev libgeos-dev unzip maven2 python-urlgrabber libpq-dev')
-
-def setup_pgsql(setup_geonode_db=True):
-    sudo("apt-get install -y postgresql-8.4 libpq-dev python-psycopg2")
+        sudo('apt-get install -y zip subversion git-core binutils build-essential python-dev python-setuptools python-imaging python-reportlab gdal-bin libproj-dev libgeos-dev unzip maven2 python-urlgrabber libpq-dev')
+    elif(platform == "centos"):
+        run("perl -pi -e 's/Defaults    requiretty/#Defaults    requiretty/g' /etc/sudoers")
+        sudo('rpm -Uvh http://download.fedora.redhat.com/pub/epel/5/i386/epel-release-5-4.noarch.rpm')
+        sudo('rpm -Uvh http://elgis.argeo.org/repos/5/elgis-release-5-5_0.noarch.rpm')
+        sudo('yum install -y python26 python26-devel tomcat5 httpd python26-virtualenv python26-mod_wsgi postgresql84 postgresql84-server gcc postgresql84-python postgresql84-libs postgresql84-devel python26-devel geos python-boto')
+    
+def setup_pgsql(setup_geonode_db=True, platform="ubuntu"):
     # ToDo: Add postgis support
-    # update pg_hba.conf to allow for md5 local connections
+    if(platform=="ubuntu"):
+        sudo("apt-get install -y postgresql-8.4 libpq-dev python-psycopg2")
+    elif(platform=="centos"):
+        run("service postgresql initdb")
+        run("service postgresql start")
+        run("chkconfig postgresql on")
+
+    # ToDo: update pg_hba.conf to allow for md5 local connections
     db_exists = int(sudo("psql -qAt -c \"select count(*) from pg_catalog.pg_database where datname = 'geonode'\"", user="postgres"))
     if(setup_geonode_db):
         if(db_exists > 0):
@@ -90,10 +106,17 @@ def setup_pgsql(setup_geonode_db=True):
         sudo("createdb -O geonode geonode", user="postgres")
         sudo("psql -c \"alter user geonode with encrypted password '%s'\" " % (POSTGRES_PASSWORD), user="postgres")
 
-def setup_prod():
-    setup_pgsql(setup_geonode_db=True)
-    sudo("apt-get install -y tomcat6 libjpeg-dev libpng-dev python-gdal apache2 libapache2-mod-wsgi")
-    # -Xms1024m -Xmx1024m -XX:NewSize=256m -XX:MaxNewSize=256m -XX:PermSize=256m -XX:MaxPermSize=256m
+def setup_prod(platform="ubuntu"):
+    setup_pgsql(setup_geonode_db=True,platform=platform)
+    if(platform=="ububtu"):
+        sudo("apt-get install -y tomcat6 libjpeg-dev libpng-dev python-gdal apache2 libapache2-mod-wsgi")
+        sudo("sed '48s/#/JAVA_OPTS=\"-Xms1024m -Xmx1024m -XX:NewSize=256m -XX:MaxNewSize=256m -XX:PermSize=256m -XX:MaxPermSize=256m\"/' -i /usr/share/tomcat6/bin/catalina.sh") 
+    elif(platform=="centos"):
+        run("sed '19s/^$/JAVA_OPTS=\"-Xmx1024m -XX:MaxPermSize=256m -XX:CompileCommand=exclude,net\/sf\/saxon\/event\/ReceivingContentHandler.startElement\"/' -i /etc/sysconfig/tomcat5")
+        sudo("chkconfig tomcat5 on")
+        sudo("service tomcat5 start")
+        sudo("chkconfig httpd on")
+        sudo("service httpd start")
 
 def build():
     sudo('chmod -R 777 /tmp #WTF?')
@@ -123,6 +146,10 @@ def upload_release(type='gz'):
         release_file = str(run('ls ~/geonode*.deb'))
         path = '~'
         bucket = DEB_BUCKET 
+    elif(type=='rpm'):
+        release_file = str(run('ls ~/*.rpm'))
+        path = '~'
+        bucket = RPM_BUCKET
     run('cd %s;export AWS_ACCESS_KEY_ID=%s;export AWS_SECRET_ACCESS_KEY=%s;python ~/upload.py %s %s' % (path, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY,bucket,release_file)) 
     run('rm ~/upload.py')
     return release_file
@@ -144,26 +171,31 @@ def hosty():
     print "http://%s:8000" % env.host
     run('cd geonode;source bin/activate;paver host')
 
-def deploy_prod(host=None, pkg=False):
+def deploy_prod(host=None, pkg=False, platform="ubuntu"):
     uname = sudo('uname -a')
     if("x86_64" in uname):
         arch = 'x86_64' 
         pkg=False
     if(host is None):
         host = env.host
-    sudo('export DEBIAN_FRONTEND=noninteractive')
-    if(pkg == True):
-        sudo('add-apt-repository "deb http://apt.opengeo.org/lucid lucid main"')
-        sudo('apt-get -y update')
-    sudo('echo "geonode geonode/django_user string %s" | sudo debconf-set-selections' % ADMIN_USER)
-    sudo('echo "geonode geonode/django_password password %s" | sudo debconf-set-selections' % ADMIN_PASSWORD)
-    sudo('echo "geonode geonode/hostname string %s" | sudo debconf-set-selections' % host)
-    if(pkg == True):
-        sudo("apt-get install -y --force-yes geonode")
-    else:
-        release_name = RELEASE_DEB_URL.split('/')[-1]
-        sudo("wget %s" % RELEASE_DEB_URL) 
-        sudo("dpkg --force-architecture -i %s" % release_name) 
+    if(platform=="ubuntu"):
+        sudo('export DEBIAN_FRONTEND=noninteractive')
+        if(pkg == True):
+            sudo('add-apt-repository "deb http://apt.opengeo.org/lucid lucid main"')
+            sudo('apt-get -y update')
+        sudo('echo "geonode geonode/django_user string %s" | sudo debconf-set-selections' % ADMIN_USER)
+        sudo('echo "geonode geonode/django_password password %s" | sudo debconf-set-selections' % ADMIN_PASSWORD)
+        sudo('echo "geonode geonode/hostname string %s" | sudo debconf-set-selections' % host)
+        if(pkg == True):
+            sudo("apt-get install -y --force-yes geonode")
+        else:
+            release_name = RELEASE_DEB_URL.split('/')[-1]
+            sudo("wget %s" % RELEASE_DEB_URL) 
+            sudo("dpkg --force-architecture -i %s" % release_name)
+    elif(platform=="centos"):
+        release_name = RELEASE_RPM_URL.split('/')[-1]
+        run("wget %s" % RELEASE_RPM_URL) 
+        run("rpm -ivh %s" % release_name)
 
 def setup_geonode_wsgi(host):
     run('mkdir -p ~/wsgi')
@@ -177,7 +209,7 @@ def setup_geonode_wsgi(host):
     sudo("/etc/init.d/apache2 restart")
     run('rm -rf ~/wsgi')
 
-def install_release(host=None):
+def install_release(host=None, platform="ubuntu"):
     if(host == None):
         host = env.host
     sudo('apt-get install -y zip')
@@ -216,7 +248,6 @@ def install_release(host=None):
   
     setup_geonode_wsgi(host)
 
-
 def setup_batch_upload(internal_ip=None):
     run('mkdir ~/celery')
     put('./celery/*', '~/celery/')
@@ -242,21 +273,33 @@ def setup_deb():
     run('mkdir -p geonode-deb')
     rsync_project('~/geonode-deb/', './deb/debian')
 
+def setup_rpm():
+    run('rpm -Uvh http://download.fedora.redhat.com/pub/epel/5/i386/epel-release-5-4.noarch.rpm')
+    run('yum install -y fedora-rpmdevtools')
+    run('yum install -y rpm-build')
+    run('yum install -y python-boto')
+    run('rpmdev-setuptree')
+    run('rm -rf ~/rpmbuild/{BUILD,SPECS}')
+    run('rm -rf ~/geonode-rpm')
+    run('mkdir -p ~/geonode-rpm')
+    rsync_project('~/geonode-rpm/', './rpm/')
+    run('ln -s ~/geonode-rpm/{BUILD,SPECS} ~/rpmbuild/')
+
 def geonode_dev():
-    setup()
+    setup(platform=DEFAULT_PLATFORM)
     build()
-    deploy_dev()
+    deploy_dev(platform=DEFAULT_PLATFORM)
     #hosty()
 
 def geonode_prod():
-    setup()
-    setup_prod()
-    deploy_prod()
+    setup(platform=DEFAULT_PLATFORM)
+    setup_prod(platform=DEFAULT_PLATFORM)
+    deploy_prod(platform=DEFAULT_PLATFORM)
 
 def geonode_release():
-    setup()
-    setup_prod()
-    install_release()
+    setup(platform=DEFAULT_PLATFORM)
+    setup_prod(platform=DEFAULT_PLATFORM)
+    install_release(platform=DEFAULT_PLATFORM)
 
 def build_geonode_deb():
     setup_deb()
@@ -264,6 +307,16 @@ def build_geonode_deb():
     run('cd geonode-deb; tar xvf %s' % RELEASE_NAME)
     run('cd geonode-deb; debuild -uc -us')
     upload_release(type='deb')
+
+def build_geonode_rpm():
+    setup_rpm()
+    run('wget %s -O ~/geonode-rpm/BUILD/%s' % (RELEASE_PKG_URL, RELEASE_NAME))
+    run('cd geonode-rpm/BUILD; tar xvf %s' % RELEASE_NAME)
+    run('rm geonode-rpm/BUILD/%s' % (RELEASE_NAME))
+    run('mkdir -p ~/geonode-rpm/BUILD/deps')
+    run('wget %s -O ~/geonode-rpm/BUILD/deps/%s' % (PSYCOPG2_RELEASE_URL, PSYCOPG2_RELEASE_URL.split('/')[-1]))
+    run('rpmbuild -bb ~/rpmbuild/SPECS/geonode.spec --buildroot=~/rpmbuild/rpmbuild/BUILDROOT/')
+    upload_release(type='rpm')
 
 def install_ec2_tools():
     sudo('export DEBIAN_FRONTEND=noninteractive')
@@ -289,7 +342,7 @@ def build_geonode_ami():
     setup()
     setup_prod()
     #deploy_prod(host='replace.me.host')
-    install_release(host='replace.me.host')
+    install_release(host='replace.me.host', platform=DEFAULT_PLATFORM)
     #setup_batch_upload(internal_ip='replace.me.internal')
     cleanup_temp()
     copy_keys()

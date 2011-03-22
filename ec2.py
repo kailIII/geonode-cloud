@@ -20,10 +20,19 @@ LUCID_64="ami-3202f25b"
 MAVERIK_32="ami-ccf405a5"
 MAVERIK_64="ami-cef405a7"
 
+CENTOS_54_32="ami-f8b35e91"
+CENTOS_54_64=""
+CENTOS_55_32=""
+CENTOS_55_64=""
+
+DEFAULT_BASE=CENTOS_54_32
+
 GEONODE_LUCID_32="ami-301cee59"
 GEONODE_LUCID_64=""
 GEONODE_MAVERIK_32=""
 GEONODE_MAVERIK_64=""
+
+DEFAULT_BASE_GEONODE=GEONODE_LUCID_32
 
 def writeconfig(config):
     # Writing our configuration file to CONFIG_FILE
@@ -39,24 +48,24 @@ def readconfig(default_ami=None):
     if not os.path.exists(CONFIG_FILE):
         config.add_section('ec2')
         if default_ami == None:
-            config.set('ec2', 'AMI', LUCID_32)
+            config.set('ec2', 'AMI', DEFAULT_BASE)
         else:
             config.set('ec2', 'AMI', default_ami)
         config.set('ec2', 'INSTANCE_TYPE', 'm1.small')
         config.set('ec2', 'SECURITY_GROUP', 'geonode')
-        config.set('ec2', 'KEY_PATH', 'geonode.pem')
-        config.set('ec2', 'USER', 'ubuntu')
+        config.set('ec2', 'KEY_PATH', '~/.ssh/geonode-dev.pem')
+        config.set('ec2', 'USER', 'ec2-user')
         writeconfig(config)
     else:
         config.read(CONFIG_FILE)
     return config
 
 def launch_geonode():
-    readconfig(default_ami=GEONODE_LUCID_32)
+    readconfig(default_ami=DEFAULT_BASE_GEONODE)
     launch()
 
 def launch_base():
-    readconfig(default_ami=LUCID_32)
+    readconfig(default_ami=DEFAULT_BASE)
     launch()
 
 def launch():
