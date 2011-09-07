@@ -25,19 +25,14 @@ RELEASE_BUCKET = 'geonode-release'
 DEB_BUCKET = 'geonode-deb'
 RPM_BUCKET = 'geonode-rpm'
 AMI_BUCKET = 'geonode-ami-dev'
-ARCH='x86_64'
-#ARCH='i386'
+#ARCH='x86_64'
+ARCH='i386'
 MAKE_PUBLIC=True
 GEONODE_GIT_URL='git://github.com/GeoNode/geonode.git'
-#RELEASE_NAME='GeoNode-1.0.tar.gz'
-#RELEASE_PKG_URL='http://dev.geonode.org/release/GeoNode-1.0.tar.gz'
-#RELEASE_DEB_URL='http://apt.opengeo.org/lucid/pool/main/g/geonode/geonode_1.0.final+1_i386.deb'
-#VERSION='1.0'
-RELEASE_NAME='GeoNode-1.0.1-2011-03-10.tar.gz'
-RELEASE_PKG_URL='https://s3.amazonaws.com/geonode-release/GeoNode-1.0.1-2011-03-10.tar.gz'
-RELEASE_DEB_URL='https://s3.amazonaws.com/geonode-deb/geonode_1.0.1_i386.deb'
-RELEASE_RPM_URL='https://s3.amazonaws.com/geonode-rpm/geonode-1.0.1-final.i386.rpm'
-VERSION='1.0.1'
+RELEASE_NAME='GeoNode-1.1-RC1.tar.gz'
+RELEASE_PKG_URL='http://dev.geonode.org/release/GeoNode-1.1-RC1.tar.gz'
+RELEASE_DEB_URL='https://s3.amazonaws.com/geonode-deb/geonode_1.1-rc1_1_all.deb'
+VERSION='1.1-RC1'
 PSYCOPG2_RELEASE_URL="http://www.psycopg.org/psycopg/tarballs/PSYCOPG-2-4/psycopg2-2.4.tar.gz"
 POSTGRES_USER='geonode'
 POSTGRES_PASSWORD='g30n0d3'
@@ -45,7 +40,8 @@ ADMIN_USER='admin' # Should not be modified
 ADMIN_PASSWORD='adm1n'
 ADMIN_EMAIL='admin@admin.admin'
 ENABLE_FTP=False
-DEFAULT_PLATFORM="centos"
+DEFAULT_PLATFORM="ubuntu"
+UBUNTU_VERSION="natty"
 
 # Geonode build
 
@@ -54,7 +50,7 @@ def upgrade():
 
 def sunjava():
     sudo('export DEBIAN_FRONTEND=noninteractive')
-    sudo('add-apt-repository "deb http://archive.canonical.com/ lucid partner"')
+    sudo('add-apt-repository "deb http://archive.canonical.com/ %s partner"' %s (UBUNTU_VERSION))
     sudo('apt-get -y update')
     # 'Accept' SunOracle Licensing
     sudo('echo "sun-java6-bin shared/accepted-sun-dlj-v1-1 boolean true" | sudo debconf-set-selections')
@@ -78,9 +74,9 @@ def setup(platform="ubuntu"):
 
         # Choose one between sunjava and openjdk.
         #openjdk()
-        sunjava()
+        #sunjava()
 
-        sudo('apt-get install -y zip subversion git-core binutils build-essential python-dev python-setuptools python-imaging python-reportlab gdal-bin libproj-dev libgeos-dev unzip maven2 python-urlgrabber libpq-dev')
+        #sudo('apt-get install -y zip subversion git-core binutils build-essential python-dev python-setuptools python-imaging python-reportlab gdal-bin libproj-dev libgeos-dev unzip maven2 python-urlgrabber libpq-dev')
     elif(platform == "centos"):
         run("perl -pi -e 's/Defaults    requiretty/#Defaults    requiretty/g' /etc/sudoers")
         sudo('rpm -Uvh http://download.fedora.redhat.com/pub/epel/5/i386/epel-release-5-4.noarch.rpm')
@@ -136,8 +132,8 @@ def switch_branch(branch_name):
     run('cd geonode;source bin/activate;django-admin.py syncdb --settings=geonode.settings')
     run('cd geonode;source bin/activate; paver make_release')
 
-def upload_release(type='gz'):
-    put('./upload.py', '~/')
+def upload_release(type='deb'):
+    put('./upload.py', '/home/ubuntu')
     if(type=='gz'):
         release_file = str(run('ls ~/geonode/shared/GeoNode*.tar.gz'))
         path = 'geonode/shared'
@@ -181,17 +177,19 @@ def deploy_prod(host=None, pkg=False, platform="ubuntu"):
     if(platform=="ubuntu"):
         sudo('export DEBIAN_FRONTEND=noninteractive')
         if(pkg == True):
-            sudo('add-apt-repository "deb http://apt.opengeo.org/lucid lucid main"')
+            sudo('add-apt-repository "deb http://apt.opengeo.org/%s %s main"' % (UBUNTU_VERSION, UBUNTU_VERSION))
             sudo('apt-get -y update')
-        sudo('echo "geonode geonode/django_user string %s" | sudo debconf-set-selections' % ADMIN_USER)
-        sudo('echo "geonode geonode/django_password password %s" | sudo debconf-set-selections' % ADMIN_PASSWORD)
-        sudo('echo "geonode geonode/hostname string %s" | sudo debconf-set-selections' % host)
         if(pkg == True):
             sudo("apt-get install -y --force-yes geonode")
         else:
             release_name = RELEASE_DEB_URL.split('/')[-1]
-            sudo("wget %s" % RELEASE_DEB_URL) 
-            sudo("dpkg --force-architecture -i %s" % release_name)
+            sudo("wget %s" % RELEASE_DEB_URL)
+            try:
+                sudo("dpkg --force-architecture -i %s" % release_name)
+            except:
+                # Erroring is ok (why?)
+                pass
+            sudo("apt-get install -y -f")
     elif(platform=="centos"):
         release_name = RELEASE_RPM_URL.split('/')[-1]
         run("wget %s" % RELEASE_RPM_URL) 
@@ -199,7 +197,7 @@ def deploy_prod(host=None, pkg=False, platform="ubuntu"):
 
 def setup_geonode_wsgi(host):
     run('mkdir -p ~/wsgi')
-    put('./wsgi/*', '~/wsgi/')
+    put('./wsgi/*', '/home/ubuntu/wsgi/')
     run("perl -pi -e 's/replace.me.site.url/%s/g' ~/wsgi/geonode" % host)
     sudo("cp ~/wsgi/geonode /etc/apache2/sites-available/")
     sudo("cp ~/wsgi/geonode.wsgi /var/www/geonode/wsgi/")
@@ -215,7 +213,7 @@ def install_release(host=None, platform="ubuntu"):
     sudo('apt-get install -y zip')
     run('rm -rf ~/deploy')
     run('mkdir ~/deploy')
-    put('./deploy/*', '~/deploy/')
+    put('./deploy/*', '/home/ubuntu/deploy/')
    
     #try:
     #    run('cp /var/www/geonode/wsgi/geonode/src/GeoNodePy/geonode/local_settings.py ~/deploy')
@@ -238,7 +236,7 @@ def install_release(host=None, platform="ubuntu"):
     # createsuperuser / changepassword
     sudo('echo "export DJANGO_SETTINGS_MODULE=\'geonode.settings\'" >> /var/www/geonode/wsgi/geonode/bin/activate')
     sudo('cd /var/www/geonode/wsgi/geonode;source bin/activate;django-admin.py createsuperuser --noinput --username=%s --email=%s' % (ADMIN_USER, ADMIN_EMAIL))
-    put('changepw.py', '~/')
+    put('changepw.py', '/home/ubuntu/')
     run("perl -pi -e 's/replace.me.admin.user/%s/g' ~/changepw.py" % ADMIN_USER) 
     run("perl -pi -e 's/replace.me.admin.pw/%s/g' ~/changepw.py" % ADMIN_PASSWORD) 
     sudo('cd /var/www/geonode/wsgi/geonode;source bin/activate;cat ~/changepw.py | django-admin.py shell')
@@ -250,7 +248,7 @@ def install_release(host=None, platform="ubuntu"):
 
 def setup_batch_upload(internal_ip=None):
     run('mkdir ~/celery')
-    put('./celery/*', '~/celery/')
+    put('./celery/*', '/home/ubuntu/celery/')
     sudo("chown root:root /home/ubuntu/celery/celeryd")
     sudo("chmod 0700 /home/ubuntu/celery/celeryd") 
     sudo("mv /home/ubuntu/celery/celeryd /etc/init.d")
@@ -288,12 +286,12 @@ def setup_rpm():
 def geonode_dev():
     setup(platform=DEFAULT_PLATFORM)
     build()
-    deploy_dev(platform=DEFAULT_PLATFORM)
-    #hosty()
+    deploy_dev()
+    hosty()
 
 def geonode_prod():
-    setup(platform=DEFAULT_PLATFORM)
-    setup_prod(platform=DEFAULT_PLATFORM)
+    #setup(platform=DEFAULT_PLATFORM)
+    #setup_prod(platform=DEFAULT_PLATFORM)
     deploy_prod(platform=DEFAULT_PLATFORM)
 
 def geonode_release():
@@ -320,10 +318,10 @@ def build_geonode_rpm():
 
 def install_ec2_tools():
     sudo('export DEBIAN_FRONTEND=noninteractive')
-    sudo('add-apt-repository "deb http://us.archive.ubuntu.com/ubuntu/ lucid multiverse"')
-    sudo('add-apt-repository "deb-src http://us.archive.ubuntu.com/ubuntu/ lucid multiverse"')
-    sudo('add-apt-repository "deb http://us.archive.ubuntu.com/ubuntu/ lucid-updates multiverse"')
-    sudo('add-apt-repository "deb-src http://us.archive.ubuntu.com/ubuntu/ lucid-updates multiverse"')
+    sudo('add-apt-repository "deb http://us-east-1.ec2.archive.ubuntu.com/ubuntu/ %s multiverse"' % (UBUNTU_VERSION))
+    #sudo('add-apt-repository "deb-src http://us-east-1.ec2.archive.ubuntu.com/ubuntu/ %s multiverse"' % (UBUNTU_VERSION))
+    sudo('add-apt-repository "deb http://us-east-1.ec2.archive.ubuntu.com/ubuntu/ %s-updates multiverse"' % (UBUNTU_VERSION))
+    #sudo('add-apt-repository "deb-src http://us-east-1.ec2.archive.ubuntu.com/ubuntu/ %s-updates multiverse"' % (UBUNTU_VERSION))
     sudo('apt-get -y update')
     sudo('apt-get install -y ec2-ami-tools')
     sudo('apt-get install -y ec2-api-tools')
@@ -335,18 +333,18 @@ def cleanup_temp():
 
 def copy_keys():
     sudo('rm -f ~/.ssh/*%s.pem' % (KEY_BASE))
-    put(('%s*%s*' % (KEY_PATH, KEY_BASE)), '~/.ssh/', mode=0400)
+    put(('%s*%s*' % (KEY_PATH, KEY_BASE)), '/home/ubuntu/.ssh/', mode=0400)
     pass
 
 def build_geonode_ami():
-    setup()
-    setup_prod()
-    #deploy_prod(host='replace.me.host')
-    install_release(host='replace.me.host', platform=DEFAULT_PLATFORM)
+    #setup()
+    #setup_prod()
+    deploy_prod(host='replace.me.host')
+    #install_release(host='replace.me.host', platform=DEFAULT_PLATFORM)
     #setup_batch_upload(internal_ip='replace.me.internal')
     cleanup_temp()
     copy_keys()
-    put('./update-instance', '~/')
+    put('./update-instance', '/home/ubuntu/')
     sudo('mv /home/ubuntu/update-instance /etc/init.d')
     sudo('chmod +x /etc/init.d/update-instance')
     sudo('sudo update-rc.d -f update-instance start 20 2 3 4 5 .')
@@ -365,30 +363,3 @@ def build_geonode_ami():
     if MAKE_PUBLIC:
         sudo("ec2-modify-image-attribute -l -a all -K ~/.ssh/pk-*.pem -C ~/.ssh/cert-*.pem %s" % (ami_id))
     print "AMI %s Ready for Use" % (ami_id)
-
-
-# Chef stuff
-
-env.chef_executable = '/var/lib/gems/1.8/bin/chef-solo'
-
-def install_chef():
-    sudo('apt-get update', pty=True)
-    sudo('apt-get install -y git-core rubygems ruby-full ruby-dev', pty=True)
-    sudo('gem install chef --no-ri --no-rdoc', pty=True)
-
-def sync_config():
-    local('rsync -av -e "ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i %s" . %s:chef' % (env.key_filename[0],env.host_string))
-    sudo('rsync -av chef /etc/')
-
-def update():
-    sync_config()
-    run('cd /etc/chef;sudo %s' % env.chef_executable, pty=True)
-
-def reload():
-    "Reload the server."
-    env.user = "docs"
-    run("kill -HUP `cat %s/gunicorn.pid`" % env.rundir, pty=True)
-
-def restart():
-    "Restart (or just start) the server"
-    #sudo('restart readthedocs-gunicorn', pty=True)
