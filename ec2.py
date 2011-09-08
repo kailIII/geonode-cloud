@@ -27,16 +27,17 @@ CENTOS_54_64=""
 CENTOS_55_32=""
 CENTOS_55_64=""
 
-DEFAULT_BASE=NATTY_32
+DEFAULT_BASE=NATTY_64
+DEFAULT_INSTANCE_TYPE='m1.large'
 
 GEONODE_LUCID_32=""
 GEONODE_LUCID_64=""
 GEONODE_MAVERIK_32=""
 GEONODE_MAVERIK_64=""
-GEONODE_NATTY_32="ami-63ff3c0a"
-GEONODE_NATTY_64=""
+GEONODE_NATTY_32="ami-910ccff8"
+GEONODE_NATTY_64="ami-2f11d246"
 
-DEFAULT_BASE_GEONODE=GEONODE_NATTY_32
+DEFAULT_BASE_GEONODE=GEONODE_NATTY_64
 
 def writeconfig(config):
     # Writing our configuration file to CONFIG_FILE
@@ -55,7 +56,7 @@ def readconfig(default_ami=None):
             config.set('ec2', 'AMI', DEFAULT_BASE)
         else:
             config.set('ec2', 'AMI', default_ami)
-        config.set('ec2', 'INSTANCE_TYPE', 'm1.small')
+        config.set('ec2', 'INSTANCE_TYPE', DEFAULT_INSTANCE_TYPE)
         config.set('ec2', 'SECURITY_GROUP', 'geonode')
         config.set('ec2', 'KEY_PATH', '~/.ssh/geonode-dev.pem')
         config.set('ec2', 'USER', 'ec2-user')

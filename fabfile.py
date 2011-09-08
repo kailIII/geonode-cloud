@@ -7,7 +7,7 @@
 #         -- or --
 #     fab -H user@hostname geonode_release
 #         -- or --
-#     fab -H user@hostname create_ami 
+#     fab -H user@hostname build_geonode_ami 
 
 import os
 import datetime
@@ -25,32 +25,41 @@ RELEASE_BUCKET = 'geonode-release'
 DEB_BUCKET = 'geonode-deb'
 RPM_BUCKET = 'geonode-rpm'
 AMI_BUCKET = 'geonode-ami-dev'
-#ARCH='x86_64'
-ARCH='i386'
+ARCH='x86_64'
+#ARCH='i386'
 MAKE_PUBLIC=True
 GEONODE_GIT_URL='git://github.com/GeoNode/geonode.git'
-RELEASE_NAME='GeoNode-1.1-RC1.tar.gz'
-RELEASE_PKG_URL='http://dev.geonode.org/release/GeoNode-1.1-RC1.tar.gz'
-RELEASE_DEB_URL='https://s3.amazonaws.com/geonode-deb/geonode_1.1-rc1_1_all.deb'
+RELEASE_NAME='GeoNode-1.1-2011-09-07.tar.gz'
+RELEASE_PKG_URL='https://s3.amazonaws.com/geonode-release/GeoNode-1.1-2011-09-07.tar.gz'
+RELEASE_DEB_URL='https://s3.amazonaws.com/geonode-deb/geonode_1.1-rc1-1_all.deb'
 VERSION='1.1-RC1'
 PSYCOPG2_RELEASE_URL="http://www.psycopg.org/psycopg/tarballs/PSYCOPG-2-4/psycopg2-2.4.tar.gz"
 POSTGRES_USER='geonode'
 POSTGRES_PASSWORD='g30n0d3'
-ADMIN_USER='admin' # Should not be modified
+ADMIN_USER='geonode' # Matches user in ubuntu packages 
 ADMIN_PASSWORD='adm1n'
 ADMIN_EMAIL='admin@admin.admin'
 ENABLE_FTP=False
 DEFAULT_PLATFORM="ubuntu"
 UBUNTU_VERSION="natty"
+DEFAULT_JAVA='sun' # sun or openjdk
 
 # Geonode build
 
 def upgrade():
     sudo('apt-get -y dist-upgrade')
 
+def install_java(vendor=None):
+    if vendor is None:
+        vendor = DEFAULT_JAVA
+    if vendor == 'sun':
+        sunjava()
+    elif vendor == 'openjdk':
+        openjdk()
+
 def sunjava():
     sudo('export DEBIAN_FRONTEND=noninteractive')
-    sudo('add-apt-repository "deb http://archive.canonical.com/ %s partner"' %s (UBUNTU_VERSION))
+    sudo('add-apt-repository "deb http://archive.canonical.com/ %s partner"' % (UBUNTU_VERSION))
     sudo('apt-get -y update')
     # 'Accept' SunOracle Licensing
     sudo('echo "sun-java6-bin shared/accepted-sun-dlj-v1-1 boolean true" | sudo debconf-set-selections')
@@ -66,23 +75,54 @@ def sunjava():
 def openjdk():
     sudo('apt-get install -y openjdk-6-jdk')   
 
-def setup(platform="ubuntu"):
+def setup_dev(platform="ubuntu"):
     if(platform == "ubuntu"):
         sudo('apt-get -y update')
         sudo('apt-get install -y python-software-properties')
         # upgrade()
 
-        # Choose one between sunjava and openjdk.
-        #openjdk()
-        #sunjava()
+        install_java()
 
-        #sudo('apt-get install -y zip subversion git-core binutils build-essential python-dev python-setuptools python-imaging python-reportlab gdal-bin libproj-dev libgeos-dev unzip maven2 python-urlgrabber libpq-dev')
+        sudo('apt-get install -y zip subversion git-core binutils build-essential \
+                python-dev python-setuptools python-imaging python-reportlab \
+                gdal-bin libproj-dev libgeos-dev unzip maven2 python-urlgrabber libpq-dev')
     elif(platform == "centos"):
         run("perl -pi -e 's/Defaults    requiretty/#Defaults    requiretty/g' /etc/sudoers")
         sudo('rpm -Uvh http://download.fedora.redhat.com/pub/epel/5/i386/epel-release-5-4.noarch.rpm')
         sudo('rpm -Uvh http://elgis.argeo.org/repos/5/elgis-release-5-5_0.noarch.rpm')
-        sudo('yum install -y python26 python26-devel tomcat5 httpd python26-virtualenv python26-mod_wsgi postgresql84 postgresql84-server gcc postgresql84-python postgresql84-libs postgresql84-devel python26-devel geos python-boto')
+        sudo('yum install -y python26 python26-devel tomcat5 httpd \
+                python26-virtualenv python26-mod_wsgi postgresql84 \
+                postgresql84-server gcc postgresql84-python postgresql84-libs \
+                postgresql84-devel python26-devel geos python-boto')
     
+def setup_prod(platform="ubuntu"):
+    #setup_pgsql(setup_geonode_db=True,platform=platform)
+    if(platform=="ubuntu"):
+        sudo('apt-get -y update')
+        sudo('apt-get install -y python-software-properties')
+        # upgrade()
+        
+        install_java()
+        
+        sudo('apt-get install -y debconf python python-support python-dev \
+                python-virtualenv tomcat6 postgresql-8.4 gcc patch zip \
+                python-imaging python-reportlab gdal-bin libgeos-dev \
+                python-urlgrabber python-pastescript gettext postgresql-contrib \
+                postgresql-8.4-postgis libpq-dev unzip libjpeg-dev libpng-dev \
+                python-gdal libproj-dev python-psycopg2 apache2 libapache2-mod-wsgi')
+        #sudo("sed '48s/#/JAVA_OPTS=\"-Xms1024m -Xmx1024m -XX:NewSize=256m \
+        #        -XX:MaxNewSize=256m -XX:PermSize=256m -XX:MaxPermSize=256m\"/' \
+        #        -i /usr/share/tomcat6/bin/catalina.sh") 
+    elif(platform=="centos"):
+        run("sed '19s/^$/JAVA_OPTS=\"-Xmx1024m -XX:MaxPermSize=256m \
+                -XX:CompileCommand=exclude,net\/sf\/saxon\/event\/\
+                ReceivingContentHandler.startElement\"/' \
+                -i /etc/sysconfig/tomcat5")
+        sudo("chkconfig tomcat5 on")
+        sudo("service tomcat5 start")
+        sudo("chkconfig httpd on")
+        sudo("service httpd start")
+
 def setup_pgsql(setup_geonode_db=True, platform="ubuntu"):
     # ToDo: Add postgis support
     if(platform=="ubuntu"):
@@ -101,18 +141,6 @@ def setup_pgsql(setup_geonode_db=True, platform="ubuntu"):
         sudo("createuser -SDR geonode", user="postgres")
         sudo("createdb -O geonode geonode", user="postgres")
         sudo("psql -c \"alter user geonode with encrypted password '%s'\" " % (POSTGRES_PASSWORD), user="postgres")
-
-def setup_prod(platform="ubuntu"):
-    setup_pgsql(setup_geonode_db=True,platform=platform)
-    if(platform=="ububtu"):
-        sudo("apt-get install -y tomcat6 libjpeg-dev libpng-dev python-gdal apache2 libapache2-mod-wsgi")
-        sudo("sed '48s/#/JAVA_OPTS=\"-Xms1024m -Xmx1024m -XX:NewSize=256m -XX:MaxNewSize=256m -XX:PermSize=256m -XX:MaxPermSize=256m\"/' -i /usr/share/tomcat6/bin/catalina.sh") 
-    elif(platform=="centos"):
-        run("sed '19s/^$/JAVA_OPTS=\"-Xmx1024m -XX:MaxPermSize=256m -XX:CompileCommand=exclude,net\/sf\/saxon\/event\/ReceivingContentHandler.startElement\"/' -i /etc/sysconfig/tomcat5")
-        sudo("chkconfig tomcat5 on")
-        sudo("service tomcat5 start")
-        sudo("chkconfig httpd on")
-        sudo("service httpd start")
 
 def build():
     sudo('chmod -R 777 /tmp #WTF?')
@@ -168,27 +196,20 @@ def hosty():
     run('cd geonode;source bin/activate;paver host')
 
 def deploy_prod(host=None, pkg=False, platform="ubuntu"):
-    uname = sudo('uname -a')
-    if("x86_64" in uname):
-        arch = 'x86_64' 
-        pkg=False
     if(host is None):
         host = env.host
     if(platform=="ubuntu"):
-        sudo('export DEBIAN_FRONTEND=noninteractive')
+        #sudo('export DEBIAN_FRONTEND=noninteractive')
         if(pkg == True):
             sudo('add-apt-repository "deb http://apt.opengeo.org/%s %s main"' % (UBUNTU_VERSION, UBUNTU_VERSION))
             sudo('apt-get -y update')
-        if(pkg == True):
             sudo("apt-get install -y --force-yes geonode")
         else:
+            print "here"
+            setup_prod(platform="ubuntu")
             release_name = RELEASE_DEB_URL.split('/')[-1]
             sudo("wget %s" % RELEASE_DEB_URL)
-            try:
-                sudo("dpkg --force-architecture -i %s" % release_name)
-            except:
-                # Erroring is ok (why?)
-                pass
+            sudo("dpkg -i %s" % release_name)
             sudo("apt-get install -y -f")
     elif(platform=="centos"):
         release_name = RELEASE_RPM_URL.split('/')[-1]
@@ -284,18 +305,15 @@ def setup_rpm():
     run('ln -s ~/geonode-rpm/{BUILD,SPECS} ~/rpmbuild/')
 
 def geonode_dev():
-    setup(platform=DEFAULT_PLATFORM)
+    setup_dev(platform=DEFAULT_PLATFORM)
     build()
     deploy_dev()
     hosty()
 
 def geonode_prod():
-    #setup(platform=DEFAULT_PLATFORM)
-    #setup_prod(platform=DEFAULT_PLATFORM)
     deploy_prod(platform=DEFAULT_PLATFORM)
 
 def geonode_release():
-    setup(platform=DEFAULT_PLATFORM)
     setup_prod(platform=DEFAULT_PLATFORM)
     install_release(platform=DEFAULT_PLATFORM)
 
@@ -337,11 +355,14 @@ def copy_keys():
     pass
 
 def build_geonode_ami():
-    #setup()
-    #setup_prod()
     deploy_prod(host='replace.me.host')
     #install_release(host='replace.me.host', platform=DEFAULT_PLATFORM)
     #setup_batch_upload(internal_ip='replace.me.internal')
+    put('changepw.py', '/home/ubuntu/')
+    run("perl -pi -e 's/replace.me.admin.user/%s/g' ~/changepw.py" % ADMIN_USER)
+    run("perl -pi -e 's/replace.me.admin.pw/%s/g' ~/changepw.py" % ADMIN_PASSWORD)
+    sudo('source /var/lib/geonode/bin/activate;cat ~/changepw.py | django-admin.py shell --settings=geonode.settings')
+    run('rm ~/changepw.py')
     cleanup_temp()
     copy_keys()
     put('./update-instance', '/home/ubuntu/')
