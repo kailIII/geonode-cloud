@@ -22,6 +22,4 @@ Usage
 * ec2.py launch
 * fab -i geonode.pem -H user@host geonode_dev
 * fab -i geonode.pem -H user@host geonode_prod
-* fab -i geonode.pem -H user@host install_chef 
-* fab -i geonode.pem -H user@host sync_config
 * fab -i geonode.pem -H user@host update 
