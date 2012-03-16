@@ -15,12 +15,17 @@ import ConfigParser
 
 CONFIG_FILE=".gnec2.cfg"
 
-LUCID_32="ami-3e02f257"
-LUCID_64="ami-3202f25b"
-MAVERIK_32="ami-ccf405a5"
-MAVERIK_64="ami-cef405a7"
-NATTY_32="ami-e2af508b"
-NATTY_64="ami-68ad5201"
+# Ubuntu
+# https://help.ubuntu.com/community/EC2StartersGuide
+# All us-east-1 EBS Backed
+LUCID_32="ami-3e9b4957"
+LUCID_64="ami-349b495d"
+MAVERIK_32="ami-c012cea9"
+MAVERIK_64="ami-c412cead"
+NATTY_32="ami-1616ca7f"
+NATTY_64="ami-e016ca89"
+ONEIRIC_32="ami-a0ba68c9"
+ONEIRIC_64="ami-baba68d3"
 
 CENTOS_54_32="ami-f8b35e91"
 CENTOS_54_64=""
