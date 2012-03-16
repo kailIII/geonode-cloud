@@ -29,10 +29,10 @@ ARCH='x86_64'
 #ARCH='i386'
 MAKE_PUBLIC=True
 GEONODE_GIT_URL='git://github.com/GeoNode/geonode.git'
-RELEASE_NAME='GeoNode-1.1-2011-09-07.tar.gz'
-RELEASE_PKG_URL='https://s3.amazonaws.com/geonode-release/GeoNode-1.1-2011-09-07.tar.gz'
-RELEASE_DEB_URL='https://s3.amazonaws.com/geonode-deb/geonode_1.1-rc1-1_all.deb'
-VERSION='1.1-RC1'
+RELEASE_NAME='GeoNode-1.1-2012-03-16.tar.gz'
+RELEASE_PKG_URL='https://s3.amazonaws.com/geonode-release/GeoNode-1.1-2012-03-16.tar.gz'
+RELEASE_DEB_URL='https://s3.amazonaws.com/geonode-deb/geonode_1.1_all.deb'
+VERSION='1.1'
 PSYCOPG2_RELEASE_URL="http://www.psycopg.org/psycopg/tarballs/PSYCOPG-2-4/psycopg2-2.4.tar.gz"
 POSTGRES_USER='geonode'
 POSTGRES_PASSWORD='g30n0d3'
@@ -199,13 +199,12 @@ def deploy_prod(host=None, pkg=False, platform="ubuntu"):
     if(host is None):
         host = env.host
     if(platform=="ubuntu"):
-        #sudo('export DEBIAN_FRONTEND=noninteractive')
+        sudo('export DEBIAN_FRONTEND=noninteractive')
         if(pkg == True):
-            sudo('add-apt-repository "deb http://apt.opengeo.org/%s %s main"' % (UBUNTU_VERSION, UBUNTU_VERSION))
+            sudo('add-apt-repository "ppa:geonode/release"')
             sudo('apt-get -y update')
             sudo("apt-get install -y --force-yes geonode")
         else:
-            print "here"
             setup_prod(platform="ubuntu")
             release_name = RELEASE_DEB_URL.split('/')[-1]
             sudo("wget %s" % RELEASE_DEB_URL)
@@ -355,9 +354,7 @@ def copy_keys():
     pass
 
 def build_geonode_ami():
-    deploy_prod(host='replace.me.host')
-    #install_release(host='replace.me.host', platform=DEFAULT_PLATFORM)
-    #setup_batch_upload(internal_ip='replace.me.internal')
+    deploy_prod(host='replace.me.host', pkg=True)
     put('changepw.py', '/home/ubuntu/')
     run("perl -pi -e 's/replace.me.admin.user/%s/g' ~/changepw.py" % ADMIN_USER)
     run("perl -pi -e 's/replace.me.admin.pw/%s/g' ~/changepw.py" % ADMIN_PASSWORD)
