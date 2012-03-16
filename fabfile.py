@@ -384,3 +384,18 @@ def build_geonode_ami():
     if MAKE_PUBLIC:
         sudo("ec2-modify-image-attribute -l -a all -K ~/.ssh/pk-*.pem -C ~/.ssh/cert-*.pem %s" % (ami_id))
     print "AMI %s Ready for Use" % (ami_id)
+
+def fix_amazon():
+    put('./update-aws-instance', '/home/ubuntu/')
+    sudo('chmod +x /home/ubuntu/update-aws-instance')
+    sudo('/home/ubuntu/update-aws-instance')
+    sudo('/etc/init.d/tomcat6 restart')
+    sudo('/etc/init.d/apache2 restart')
+
+def fix_sites():
+    put('updatesites.py', '/home/ubuntu/')
+    sudo('source /var/lib/geonode/bin/activate;cat ~/updatesites.py | django-admin.py shell --settings=geonode.settings')
+    run('rm ~/updatesites.py')
+
+def updatelayers():
+    run('geonode updatelayers')
