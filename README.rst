@@ -1,10 +1,10 @@
 =========
-Chef GeoNode 
+GeoNode Cloud Scripts
 =========
 
 Summary
 ==================
-Chef GeoNode is a set of scripts (recipes, cookbooks, fabric and whatnot) for launching GeoNode instances on ec2 or other infrastructure.
+GeoNode Admin is a set of scripts for launching GeoNode instances on ec2 or other cloud infrastructure.
 
 Requirements
 ==================
@@ -16,8 +16,6 @@ Requirements
  - easy_install boto 
 * fabric (http://docs.fabfile.org/0.9.3/)
  - easy_install fabric
-* chef (http://opscode.com/chef)
- - gem install chef
 
 Usage 
 ==================
