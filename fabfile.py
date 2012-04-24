@@ -29,8 +29,8 @@ ARCH='x86_64'
 #ARCH='i386'
 MAKE_PUBLIC=True
 GEONODE_GIT_URL='git://github.com/GeoNode/geonode.git'
-RELEASE_NAME='GeoNode-1.1-2012-03-16.tar.gz'
-RELEASE_PKG_URL='https://s3.amazonaws.com/geonode-release/GeoNode-1.1-2012-03-16.tar.gz'
+RELEASE_NAME='GeoNode-1.1.tar.gz'
+RELEASE_PKG_URL='http://dev.geonode.org/release/GeoNode-1.1.tar.gz'
 RELEASE_DEB_URL='https://s3.amazonaws.com/geonode-deb/geonode_1.1_all.deb'
 VERSION='1.1'
 PSYCOPG2_RELEASE_URL="http://www.psycopg.org/psycopg/tarballs/PSYCOPG-2-4/psycopg2-2.4.tar.gz"
@@ -40,7 +40,7 @@ ADMIN_USER='geonode' # Matches user in ubuntu packages
 ADMIN_PASSWORD='adm1n'
 ADMIN_EMAIL='admin@admin.admin'
 ENABLE_FTP=False
-DEFAULT_PLATFORM="ubuntu"
+DEFAULT_PLATFORM="centos"
 UBUNTU_VERSION="natty"
 DEFAULT_JAVA='sun' # sun or openjdk
 
@@ -88,7 +88,7 @@ def setup_dev(platform="ubuntu"):
                 gdal-bin libproj-dev libgeos-dev unzip maven2 python-urlgrabber libpq-dev')
     elif(platform == "centos"):
         run("perl -pi -e 's/Defaults    requiretty/#Defaults    requiretty/g' /etc/sudoers")
-        sudo('rpm -Uvh http://download.fedora.redhat.com/pub/epel/5/i386/epel-release-5-4.noarch.rpm')
+        sudo('rpm -Uvh http://dl.fedoraproject.org/pub/epel/5/i386/epel-release-5-4.noarch.rpm')
         sudo('rpm -Uvh http://elgis.argeo.org/repos/5/elgis-release-5-5_0.noarch.rpm')
         sudo('yum install -y python26 python26-devel tomcat5 httpd \
                 python26-virtualenv python26-mod_wsgi postgresql84 \
@@ -114,14 +114,15 @@ def setup_prod(platform="ubuntu"):
         #        -XX:MaxNewSize=256m -XX:PermSize=256m -XX:MaxPermSize=256m\"/' \
         #        -i /usr/share/tomcat6/bin/catalina.sh") 
     elif(platform=="centos"):
-        run("sed '19s/^$/JAVA_OPTS=\"-Xmx1024m -XX:MaxPermSize=256m \
-                -XX:CompileCommand=exclude,net\/sf\/saxon\/event\/\
-                ReceivingContentHandler.startElement\"/' \
-                -i /etc/sysconfig/tomcat5")
-        sudo("chkconfig tomcat5 on")
-        sudo("service tomcat5 start")
-        sudo("chkconfig httpd on")
-        sudo("service httpd start")
+        #run("sed '19s/^$/JAVA_OPTS=\"-Xmx1024m -XX:MaxPermSize=256m \
+        #        -XX:CompileCommand=exclude,net\/sf\/saxon\/event\/\
+        #        ReceivingContentHandler.startElement\"/' \
+        #        -i /etc/sysconfig/tomcat5")
+        #sudo("chkconfig tomcat5 on")
+        #sudo("service tomcat5 start")
+        #sudo("chkconfig httpd on")
+        #sudo("service httpd start")
+        pass
 
 def setup_pgsql(setup_geonode_db=True, platform="ubuntu"):
     # ToDo: Add postgis support
@@ -195,7 +196,7 @@ def hosty():
     print "http://%s:8000" % env.host
     run('cd geonode;source bin/activate;paver host')
 
-def deploy_prod(host=None, pkg=False, platform="ubuntu"):
+def deploy_prod(host=None, pkg=False, platform=DEFAULT_PLATFORM):
     if(host is None):
         host = env.host
     if(platform=="ubuntu"):
@@ -211,9 +212,23 @@ def deploy_prod(host=None, pkg=False, platform="ubuntu"):
             sudo("dpkg -i %s" % release_name)
             sudo("apt-get install -y -f")
     elif(platform=="centos"):
-        release_name = RELEASE_RPM_URL.split('/')[-1]
-        run("wget %s" % RELEASE_RPM_URL) 
-        run("rpm -ivh %s" % release_name)
+        # cp install dir to host
+        sudo("rm -rf /tmp/package")
+        sudo("mkdir /tmp/package")
+        put('package/*', '/tmp/package')
+        sudo('rpm -Uvh http://dl.fedoraproject.org/pub/epel/5/i386/epel-release-5-4.noarch.rpm')
+        sudo('rpm -Uvh http://elgis.argeo.org/repos/5/elgis-release-5-5_0.noarch.rpm')
+        sudo("bash /tmp/package/install.yum.sh")
+        sudo("bash /tmp/package/setup.postgres.sh")
+        #sudo("bash /tmp/package/setup.security.sh")
+        sudo("wget %s" % RELEASE_PKG_URL) 
+        sudo("tar -xvzf %s" % RELEASE_NAME)
+        sudo("rm -rf ~/%s/support/*" % RELEASE_NAME.replace(".tar.gz", ""))
+        sudo("cp -R /tmp/package/support/* ~/%s/support/" % RELEASE_NAME.replace(".tar.gz", ""))
+        sudo("cd %s; bash /tmp/package/install.sh /tmp/package/support/config-centos.sh" % RELEASE_NAME.replace(".tar.gz", ""))
+        sudo("service httpd start")
+        sudo("service tomcat5 start")
+        # Need to replace the hostname in local_settings.py 
 
 def setup_geonode_wsgi(host):
     run('mkdir -p ~/wsgi')
