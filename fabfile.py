@@ -29,10 +29,10 @@ ARCH='x86_64'
 #ARCH='i386'
 MAKE_PUBLIC=True
 GEONODE_GIT_URL='git://github.com/GeoNode/geonode.git'
-RELEASE_NAME='GeoNode-1.1.1.tar.gz'
-RELEASE_PKG_URL='http://dev.geonode.org/release/GeoNode-1.1.1.tar.gz'
+RELEASE_NAME='GeoNode-1.2a2.tar.gz'
+RELEASE_PKG_URL='http://dev.geonode.org/release/GeoNode-1.2a2.tar.gz'
 RELEASE_DEB_URL='https://s3.amazonaws.com/geonode-deb/geonode_1.1_all.deb'
-VERSION='1.1'
+VERSION='1.2a1'
 PSYCOPG2_RELEASE_URL="http://www.psycopg.org/psycopg/tarballs/PSYCOPG-2-4/psycopg2-2.4.tar.gz"
 POSTGRES_USER='geonode'
 POSTGRES_PASSWORD='g30n0d3'
@@ -40,7 +40,7 @@ ADMIN_USER='geonode' # Matches user in ubuntu packages
 ADMIN_PASSWORD='adm1n'
 ADMIN_EMAIL='admin@admin.admin'
 ENABLE_FTP=False
-DEFAULT_PLATFORM="centos"
+DEFAULT_PLATFORM="ubuntu"
 UBUNTU_VERSION="natty"
 DEFAULT_JAVA='sun' # sun or openjdk
 
@@ -202,9 +202,10 @@ def deploy_prod(host=None, pkg=False, platform=DEFAULT_PLATFORM):
     if(platform=="ubuntu"):
         sudo('export DEBIAN_FRONTEND=noninteractive')
         if(pkg == True):
-            sudo('add-apt-repository "ppa:geonode/release"')
+            sudo('add-apt-repository -y "ppa:geonode/testing"')
             sudo('apt-get -y update')
             sudo("apt-get install -y --force-yes geonode")
+            change_admin_password()
         else:
             setup_prod(platform="ubuntu")
             release_name = RELEASE_DEB_URL.split('/')[-1]
@@ -271,11 +272,7 @@ def install_release(host=None, platform="ubuntu"):
     # createsuperuser / changepassword
     sudo('echo "export DJANGO_SETTINGS_MODULE=\'geonode.settings\'" >> /var/www/geonode/wsgi/geonode/bin/activate')
     sudo('cd /var/www/geonode/wsgi/geonode;source bin/activate;django-admin.py createsuperuser --noinput --username=%s --email=%s' % (ADMIN_USER, ADMIN_EMAIL))
-    put('changepw.py', '/home/ubuntu/')
-    run("perl -pi -e 's/replace.me.admin.user/%s/g' ~/changepw.py" % ADMIN_USER) 
-    run("perl -pi -e 's/replace.me.admin.pw/%s/g' ~/changepw.py" % ADMIN_PASSWORD) 
-    sudo('cd /var/www/geonode/wsgi/geonode;source bin/activate;cat ~/changepw.py | django-admin.py shell')
-    run('rm ~/changepw.py')
+    change_admin_password()
     run('rm -rf ~/release')
     run('rm -rf ~/deploy')
   
@@ -325,7 +322,7 @@ def geonode_dev():
     hosty()
 
 def geonode_prod():
-    deploy_prod(platform=DEFAULT_PLATFORM)
+    deploy_prod(platform=DEFAULT_PLATFORM, pkg=True)
 
 def geonode_release():
     setup_prod(platform=DEFAULT_PLATFORM)
@@ -368,13 +365,16 @@ def copy_keys():
     put(('%s*%s*' % (KEY_PATH, KEY_BASE)), '/home/ubuntu/.ssh/', mode=0400)
     pass
 
-def build_geonode_ami():
-    deploy_prod(host='replace.me.host', pkg=True)
+def change_admin_password():
     put('changepw.py', '/home/ubuntu/')
     run("perl -pi -e 's/replace.me.admin.user/%s/g' ~/changepw.py" % ADMIN_USER)
     run("perl -pi -e 's/replace.me.admin.pw/%s/g' ~/changepw.py" % ADMIN_PASSWORD)
     sudo('source /var/lib/geonode/bin/activate;cat ~/changepw.py | django-admin.py shell --settings=geonode.settings')
     run('rm ~/changepw.py')
+
+def build_geonode_ami():
+    deploy_prod(host='replace.me.host', pkg=True)
+    change_admin_password()
     cleanup_temp()
     copy_keys()
     put('./update-instance', '/home/ubuntu/')
