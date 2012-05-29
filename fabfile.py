@@ -29,8 +29,8 @@ ARCH='x86_64'
 #ARCH='i386'
 MAKE_PUBLIC=True
 GEONODE_GIT_URL='git://github.com/GeoNode/geonode.git'
-RELEASE_NAME='GeoNode-1.1.tar.gz'
-RELEASE_PKG_URL='http://dev.geonode.org/release/GeoNode-1.1.tar.gz'
+RELEASE_NAME='GeoNode-1.1.1.tar.gz'
+RELEASE_PKG_URL='http://dev.geonode.org/release/GeoNode-1.1.1.tar.gz'
 RELEASE_DEB_URL='https://s3.amazonaws.com/geonode-deb/geonode_1.1_all.deb'
 VERSION='1.1'
 PSYCOPG2_RELEASE_URL="http://www.psycopg.org/psycopg/tarballs/PSYCOPG-2-4/psycopg2-2.4.tar.gz"
@@ -215,17 +215,17 @@ def deploy_prod(host=None, pkg=False, platform=DEFAULT_PLATFORM):
         # cp install dir to host
         sudo("rm -rf /tmp/package")
         sudo("mkdir /tmp/package")
-        put('package/*', '/tmp/package')
+        put('package/*', '/tmp/package', use_sudo=True)
         sudo('rpm -Uvh http://dl.fedoraproject.org/pub/epel/5/i386/epel-release-5-4.noarch.rpm')
         sudo('rpm -Uvh http://elgis.argeo.org/repos/5/elgis-release-5-5_0.noarch.rpm')
         sudo("bash /tmp/package/install.yum.sh")
         sudo("bash /tmp/package/setup.postgres.sh")
-        #sudo("bash /tmp/package/setup.security.sh")
+        sudo("bash /tmp/package/setup.security.sh")
         sudo("wget %s" % RELEASE_PKG_URL) 
         sudo("tar -xvzf %s" % RELEASE_NAME)
         sudo("rm -rf ~/%s/support/*" % RELEASE_NAME.replace(".tar.gz", ""))
-        sudo("cp -R /tmp/package/support/* ~/%s/support/" % RELEASE_NAME.replace(".tar.gz", ""))
-        sudo("cd %s; bash /tmp/package/install.sh /tmp/package/support/config-centos.sh" % RELEASE_NAME.replace(".tar.gz", ""))
+        sudo("cp -R /tmp/package/support/* ~/%s/support/" % "GeoNode-1.1.1-2012-04-19")
+        sudo("cd %s; bash /tmp/package/install.sh /tmp/package/support/config-centos.sh" % "GeoNode-1.1.1-2012-04-19")
         sudo("service httpd start")
         sudo("service tomcat5 start")
         # Need to replace the hostname in local_settings.py 
